@@ -1,20 +1,18 @@
 #include "arduinoFFT.h" // Liberia para medir la serie de f
+#include <WiFi.h> // libreria para wifi
+#include <WiFiClientSecure.h> // libreri para wifi seguro
+#include <HTTPClient.h> // liberia para usar http
+#include <ArduinoJson.h> // libreria para procesar json
+#include <UniversalTelegramBot.h> // libreria de telegram
+#include "config.h" // archivo de configuracion
+
 #define SAMPLES 128 // muestra necesaria para el calculo de la frecuencia
 #define SAMPLING_FREQ 2048 // constante que permite relacionar los bits a herts (el valor maximo medido en bits)
 
-// #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
-#include <UniversalTelegramBot.h>
-#include "config.h";
+arduinoFFT FFT = arduinoFFT(); //inicializacion de la libreria de FFT
+WiFiClientSecure client; // inicializa el cliente de wifi
+UniversalTelegramBot bot(BOTtoken, client); // inicializa al bot de telegram
 
-//conexion segura para telegram
-WiFiClientSecure client;
-//iniacializa la conexion con el bot
-UniversalTelegramBot bot(BOTtoken, client);
-
-arduinoFFT FFT = arduinoFFT(); // inicializacion de la libreria FFT
 unsigned int samplingPeriod; // variable para guardar el peridodo de la serie
 unsigned long microSeg; // variable para guardar los microsegundo de ejecucion
 String chat_id = "";
