@@ -17,7 +17,7 @@ UniversalTelegramBot bot(BOTtoken, client);
 arduinoFFT FFT = arduinoFFT(); // inicializacion de la libreria FFT
 unsigned int samplingPeriod; // variable para guardar el peridodo de la serie
 unsigned long microSeg; // variable para guardar los microsegundo de ejecucion
-
+String chat_id = "";
 unsigned int senialMax = 0;  //Valor minimo de la señal
 unsigned int senialMin = 1024;  //Valor Maximo de la señal
 int amplitude = 0;
@@ -65,32 +65,8 @@ void turnOfAllLeds() {
   digitalWrite(RedPin, LOW);
 }
 
-const turnOnLedsWithConfig() {
-   HTTPClient http;
-  // http.begin(baseApi + "/configuration");
-  int httpCode = http.GET();
-  if (httpCode > 0) { //Check for the returning code
-
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, http.getStream());
-    if (error) {
-      Serial.print(F("deserializeJson() failed: "));
-      Serial.println(error.f_str());
-      bot.sendMessage(chat_id, "Ocurrio un error al procesar su configuracion", "Markdown");
-      return false;
-    }
-
-    int color = doc["colorConfig"].as<int>();
-    turnOnRbgLeds(color);
-  } else {
-    Serial.println("Error al obtener los datos de la api");
-    bot.sendMessage(chat_id, "Ocurrio un error al obtener su configuracion", "Markdown");
-  }
-  Serial.println("libero");
-  http.end();
-}
 // prende la combinacion de los colores
-void turnOnRbgLeds(colorLed) {
+void turnOnRbgLeds(int colorLed) {
   turnOfAllLeds();
   switch (colorLed) {
     case 0: //rojo
@@ -122,6 +98,30 @@ void turnOnRbgLeds(colorLed) {
     default:
       digitalWrite(BluePin, HIGH);
   }
+}
+
+void turnOnLedsWithConfig(int decibels) {
+   HTTPClient http;
+  // http.begin(baseApi + "/configuration");
+  int httpCode = http.GET();
+  if (httpCode > 0) { //Check for the returning code
+
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, http.getStream());
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+      bot.sendMessage(chat_id, "Ocurrio un error al procesar su configuracion", "Markdown");
+    } else {
+     int color = doc["colorConfig"].as<int>();
+     turnOnRbgLeds(color); 
+    }
+  } else {
+    Serial.println("Error al obtener los datos de la api");
+    bot.sendMessage(chat_id, "Ocurrio un error al obtener su configuracion", "Markdown");
+  }
+  Serial.println("libero");
+  http.end();
 }
 
 // funcion que revisa si hay nuevos mensajes en telegram
@@ -176,7 +176,7 @@ void loop() {
   decibels = map(amplitude, 0, 2048, 49, 120);  // relacionamos el minimo y maximo en bits contra el min en decibeles
   // funcion para enviar mensaje por telegram si el volumen es alto
   sendMessageIfDbAreHigh(decibels);
-  
+  turnOnLedsWithConfig(decibels);
   // Se evalua la longitud de la onda
   FFT.Windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
   //
