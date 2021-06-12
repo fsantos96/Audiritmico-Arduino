@@ -100,7 +100,7 @@ void turnOnRbgLeds(int colorLed) {
 
 void turnOnLedsWithConfig(int decibels) {
    HTTPClient http;
-  // http.begin(baseApi + "/configuration");
+  http.begin(baseApi + "/getArduinoConfig");
   int httpCode = http.GET();
   if (httpCode > 0) { //Check for the returning code
 
@@ -111,8 +111,16 @@ void turnOnLedsWithConfig(int decibels) {
       Serial.println(error.f_str());
       bot.sendMessage(chat_id, "Ocurrio un error al procesar su configuracion", "Markdown");
     } else {
-     int color = doc["colorConfig"].as<int>();
-     turnOnRbgLeds(color); 
+     int amountConfigurations = doc["amountConfigurations"].as<int>();
+     int colorId = 0;
+     for(int i = 0; i < amountConfigurations; i++) {
+       if(doc["configurations"][i]["min"].as<int>() <= decibels && doc["configurations"][i]["max"].as<int>() > decibels) {
+         colorId = doc["configurations"][i]["color"].as<int>()
+         break;
+       }
+     }
+
+     turnOnRbgLeds(colorId); 
     }
   } else {
     Serial.println("Error al obtener los datos de la api");
@@ -124,9 +132,6 @@ void turnOnLedsWithConfig(int decibels) {
 
 // funcion que revisa si hay nuevos mensajes en telegram
 void handleNewMessages(int numNewMessages) {
-  Serial.println("handleNewMessages");
-  Serial.println(String(numNewMessages));
-
   for (int i = 0; i < numNewMessages; i++) {
     chat_id = String(bot.messages[i].chat_id);
     String text = bot.messages[i].text;
@@ -135,8 +140,8 @@ void handleNewMessages(int numNewMessages) {
     if (from_name == "") from_name = "Guest";
 
     if (text == "/start") {
-      String welcome = "Bienvenido, " + from_name + ". Le notificaremos los registros de movimiento\n";
-      welcome += "Ingrese al sitio " + baseApi + "para configurar su sensor\n";
+      String welcome = "Bienvenido, " + from_name + "\n";
+      welcome += "Ingrese al sitio " + urlSite + " para configurar su sensor\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
@@ -144,7 +149,7 @@ void handleNewMessages(int numNewMessages) {
 
 void sendMessageIfDbAreHigh(int decibels) {
  if (decibels >= 70) {
-     // enviar mensaje a telegram
+    bot.sendMessage(chat_id, "El volumen que esta usando es muy alto", "Markdown");
   }
 }
 
@@ -185,6 +190,6 @@ void loop() {
   //se obtiene el pico maximo.
   double peak = FFT.MajorPeak(vReal, SAMPLES, SAMPLING_FREQ);
   Serial.println(peak);
-  delay(2000);
+  delay(2000); //ajustar este time dps de pruebas
 
 }
