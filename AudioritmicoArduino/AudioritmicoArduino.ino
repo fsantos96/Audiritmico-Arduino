@@ -12,12 +12,12 @@
 arduinoFFT FFT = arduinoFFT(); //inicializacion de la libreria de FFT
 WiFiClientSecure client; // inicializa el cliente de wifi
 UniversalTelegramBot bot(BOTtoken, client); // inicializa al bot de telegram
-
+unsigned long lastTimeBotRan; // variable de delay para pedir los mensajes de telegram 
 unsigned int samplingPeriod; // variable para guardar el peridodo de la serie
 unsigned long microSeg; // variable para guardar los microsegundo de ejecucion
 String chat_id = "";
 unsigned int senialMax = 0;  //Valor minimo de la señal
-unsigned int senialMin = 1024;  //Valor Maximo de la señal
+unsigned int senialMin = 2048;  //Valor Maximo de la señal
 int amplitude = 0;
 int decibels = 0; // variable para guardar la medida en decibeles
 // variables para guardar los puntos los puntos de la serie
@@ -26,18 +26,16 @@ double vIm[SAMPLES];
 
 void setup() {
   Serial.begin(115200);
-  samplingPeriod = round(1000000 * (1.0 / SAMPLING_FREQ));
+  samplingPeriod = round(1000000 * (1.0 / SAMPLING_FREQ)); // calcula el periodo para los calculos de Fourier
   pinMode(PIRPin, INPUT);
   pinMode(GreenPin, OUTPUT);
   pinMode(BluePin, OUTPUT);
   pinMode(RedPin, OUTPUT);
   pinMode(ONBOARD_LED, OUTPUT);
 
-  // inicializa el cliente para http
+  // levanta el cliente seguro.
   client.setInsecure();
-
   delay(100);
-
 //conecta al wifi
   Serial.print("Connecting Wifi: ");
   Serial.println(ssid);
@@ -53,7 +51,6 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
   delay(10);
-
 }
 
 // apaga todos los leds
@@ -98,8 +95,8 @@ void turnOnRbgLeds(int colorLed) {
   }
 }
 
-void turnOnLedsWithConfig(int decibels) {
-   HTTPClient http;
+void turnOnLedsWithConfig(int peak) {
+  HTTPClient http;
   http.begin(baseApi + "/getArduinoConfig");
   int httpCode = http.GET();
   if (httpCode > 0) { //Check for the returning code
@@ -114,7 +111,7 @@ void turnOnLedsWithConfig(int decibels) {
      int amountConfigurations = doc["amountConfigurations"].as<int>();
      int colorId = 0;
      for(int i = 0; i < amountConfigurations; i++) {
-       if(doc["configurations"][i]["min"].as<int>() <= decibels && doc["configurations"][i]["max"].as<int>() > decibels) {
+       if(doc["configurations"][i]["min"].as<int>() <= peak && doc["configurations"][i]["max"].as<int>() > peak) {
          colorId = doc["configurations"][i]["color"].as<int>()
          break;
        }
@@ -130,7 +127,7 @@ void turnOnLedsWithConfig(int decibels) {
   http.end();
 }
 
-// funcion que revisa si hay nuevos mensajes en telegram
+// funcion que procesa los mensaje de telegram
 void handleNewMessages(int numNewMessages) {
   for (int i = 0; i < numNewMessages; i++) {
     chat_id = String(bot.messages[i].chat_id);
@@ -141,7 +138,7 @@ void handleNewMessages(int numNewMessages) {
 
     if (text == "/start") {
       String welcome = "Bienvenido, " + from_name + "\n";
-      welcome += "Ingrese al sitio " + urlSite + " para configurar su sensor\n";
+      welcome += "Ingrese al sitio " + urlSite + " para configurar tus colores\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
@@ -154,6 +151,19 @@ void sendMessageIfDbAreHigh(int decibels) {
 }
 
 void loop() {
+   // escucha los mensajes de telegrm
+  if (millis() > lastTimeBotRan + botRequestDelay)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+
+  // se recorre de a un mensaje
+    while (numNewMessages) {
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+
+    lastTimeBotRan = millis();
+  }
+
   // seteo de los puntos de la serie en la variable
   for (int i = 0; i < SAMPLES; i++) {
     microSeg = micros();
@@ -167,7 +177,7 @@ void loop() {
     }
     else if (vReal[i] < senialMin)
     {
-      senialMin = vReal[i];  //  // Guardo el valor minimo de la señal
+      senialMin = vReal[i];  //  Guardo el valor minimo de la señal
     }
     // pausa para la lectura
     while (micros() < (microSeg + samplingPeriod )) {
@@ -176,11 +186,10 @@ void loop() {
   }
 
   amplitude = senialMax - senialMin;  // se calcula la amplitud
-  decibels = map(amplitude, 0, 2048, 49, 120);  // relacionamos el minimo y maximo en bits contra el min en decibeles
+  decibels = map(amplitude, 0, 2048, 48, 120);  // relacionamos el minimo y maximo en bits contra el min en decibeles
   // funcion para enviar mensaje por telegram si el volumen es alto
   sendMessageIfDbAreHigh(decibels);
-  turnOnLedsWithConfig(decibels);
-  // Se evalua la longitud de la onda
+  // crea una ventana de muestra y se evalua la longitud de la onda
   FFT.Windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
   //
   FFT.Compute(vReal, vIm, SAMPLES, FFT_FORWARD);
@@ -189,6 +198,7 @@ void loop() {
 
   //se obtiene el pico maximo.
   double peak = FFT.MajorPeak(vReal, SAMPLES, SAMPLING_FREQ);
+  turnOnLedsWithConfig(peak);
   Serial.println(peak);
   delay(2000); //ajustar este time dps de pruebas
 
